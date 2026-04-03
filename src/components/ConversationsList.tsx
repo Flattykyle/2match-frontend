@@ -98,6 +98,25 @@ const ConversationsList = ({
         const profilePic = getProfilePicture(conversation.otherUser)
         const isUnread = conversation.unreadCount > 0
 
+        // Archived conversation — gentle placeholder
+        if (conversation.archived) {
+          return (
+            <div
+              key={conversation.id}
+              className="p-4 border-b border-gray-200 opacity-60"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <MessageCircle className="w-5 h-5 text-gray-300" />
+                </div>
+                <p className="text-sm text-gray-400 italic">
+                  This conversation is no longer available
+                </p>
+              </div>
+            </div>
+          )
+        }
+
         return (
           <div
             key={conversation.id}

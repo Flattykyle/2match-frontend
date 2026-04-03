@@ -12,6 +12,9 @@ export interface Message {
   receiverId: string
   conversationId: string
   content: string
+  type?: string
+  audioUrl?: string | null
+  audioDuration?: number | null
   sentAt: string
   isRead: boolean
   readAt: string | null
@@ -38,6 +41,7 @@ export interface Conversation {
   user1Id: string
   user2Id: string
   requestStatus: string
+  archived?: boolean
   createdAt: string
   lastMessageAt: string
   user1: ConversationUser

@@ -66,7 +66,7 @@ const Register = () => {
         lookingFor: formData.lookingFor,
       })
       setAuth(response.user)
-      navigate('/dashboard')
+      navigate('/onboarding')
     } catch (err: any) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.')
     } finally {

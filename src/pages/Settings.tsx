@@ -17,12 +17,17 @@ import {
   Heart,
   ChevronRight,
   CheckCircle2,
+  Sparkles,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useThemeStore } from '../store/themeStore'
 import { getProfileCompletion } from '../services/profileService'
 import { ProfileCompletion } from '../types'
 import VerificationSection from '../components/VerificationSection'
+import { billingService, SubscriptionStatus } from '../services/billingService'
+import { format } from 'date-fns'
 
 const Settings = () => {
   const navigate = useNavigate()
@@ -44,6 +49,26 @@ const Settings = () => {
     email: '',
     phone: '',
   })
+
+  const [subStatus, setSubStatus] = useState<SubscriptionStatus | null>(null)
+  const [portalLoading, setPortalLoading] = useState(false)
+
+  useEffect(() => {
+    billingService.getStatus().then(setSubStatus).catch(() => {})
+  }, [])
+
+  const handleManageSubscription = async () => {
+    setPortalLoading(true)
+    try {
+      const url = await billingService.getPortalUrl()
+      if (url) window.location.href = url
+    } catch {
+      // If no subscription, redirect to upgrade page
+      navigate('/upgrade')
+    } finally {
+      setPortalLoading(false)
+    }
+  }
 
   useEffect(() => {
     const fetchCompletion = async () => {
@@ -342,6 +367,60 @@ const Settings = () => {
               <ChevronRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
+        </section>
+
+        {/* ============ SUBSCRIPTION ============ */}
+        <section className="card border-l-4 border-l-primary-400 dark:border-l-primary-500">
+          <div className="flex items-center gap-3 mb-5">
+            <Sparkles className="w-5 h-5 text-primary-500" />
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Subscription</h2>
+          </div>
+
+          <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: subStatus?.subscriptionTier !== 'FREE' ? '#E1F5EE' : '#F9F6F0' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold" style={{ color: '#2D5C4F' }}>
+                {subStatus?.subscriptionTier === 'FREE' ? 'Free Plan' :
+                 subStatus?.subscriptionTier === 'PLATINUM' ? 'Platinum' : 'Premium'}
+              </span>
+              {subStatus?.subscriptionTier !== 'FREE' && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: '#2D5C4F' }}>
+                  <Sparkles className="w-3 h-3" />
+                  Active
+                </span>
+              )}
+            </div>
+            {subStatus?.subscriptionExpiresAt && subStatus.subscriptionTier !== 'FREE' && (
+              <p className="text-xs" style={{ color: '#6B7B75' }}>
+                Renews {format(new Date(subStatus.subscriptionExpiresAt), 'MMM d, yyyy')}
+              </p>
+            )}
+            {subStatus?.subscriptionTier === 'FREE' && (
+              <p className="text-xs" style={{ color: '#8A8578' }}>
+                Upgrade for unlimited picks, see who likes you, shared playlists, and more.
+              </p>
+            )}
+          </div>
+
+          {subStatus?.subscriptionTier !== 'FREE' ? (
+            <button
+              onClick={handleManageSubscription}
+              disabled={portalLoading}
+              className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border text-sm font-semibold transition-colors hover:bg-gray-50"
+              style={{ borderColor: '#E1F5EE', color: '#2D5C4F' }}
+            >
+              {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+              Manage Subscription
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate('/upgrade')}
+              className="w-full flex items-center justify-center gap-2 p-3 rounded-xl text-white text-sm font-semibold transition-all"
+              style={{ backgroundColor: '#2D5C4F' }}
+            >
+              <Sparkles className="w-4 h-4" />
+              Upgrade to Premium
+            </button>
+          )}
         </section>
 
         {/* ============ VERIFICATION ============ */}

@@ -1,346 +1,320 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, AlertCircle, RefreshCw, Heart, X, Filter, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Loader2, Moon, Clock } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
-import { getPotentialMatches, likeUser, passUser, PotentialMatch } from '../services/discoveryService'
-import { vibeTagService, VibeTag } from '../services/vibeTagService'
-import MatchCard from '../components/MatchCard'
+import { useDiscoveryStore } from '../store/discoveryStore'
+import { expressInterest, passUser, DailyPick } from '../services/discoveryService'
+import ProfileCard from '../components/profile/ProfileCard'
+import type { ProfileData } from '../components/profile/ProfileCard'
+import MatchCelebration from '../components/ui/MatchCelebration'
+
+/* ═══════════════════════════════════════════════════════════════
+   Helpers
+   ═══════════════════════════════════════════════════════════════ */
+
+const INTENTION_MAP: Record<string, ProfileData['intention']> = {
+  SERIOUS: 'serious',
+  CASUAL: 'casual',
+  FRIENDS_FIRST: 'friends-first',
+  OPEN: 'open',
+  EXPLORING: 'exploring',
+}
+
+function calculateAge(dob: string): number {
+  const birth = new Date(dob)
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const m = today.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
+  return age
+}
+
+function toProfileData(pick: DailyPick): ProfileData {
+  return {
+    id: pick.id,
+    firstName: pick.firstName,
+    age: calculateAge(pick.dateOfBirth),
+    locationDistance: pick.distanceText ?? undefined,
+    online: pick.isOnline,
+    intention: pick.intention ? INTENTION_MAP[pick.intention] ?? 'exploring' : undefined,
+    vibeTags: pick.vibeTags?.map((t) => ({ emoji: t.emoji, label: t.label })),
+    greenFlag: pick.greenFlag ?? undefined,
+    redFlag: pick.redFlag ?? undefined,
+    currentlyObsessedWith: pick.currentlyObsessedWith ?? undefined,
+    voiceMemo:
+      pick.voiceIntroUrl && pick.voiceIntroDuration
+        ? { url: pick.voiceIntroUrl, duration: pick.voiceIntroDuration }
+        : undefined,
+    photos: pick.profilePictures?.length ? pick.profilePictures : undefined,
+  }
+}
+
+/* ── Countdown hook ── */
+function useCountdown(expiresAt: string | null) {
+  const [timeLeft, setTimeLeft] = useState('')
+
+  useEffect(() => {
+    if (!expiresAt) return
+
+    const tick = () => {
+      const diff = new Date(expiresAt).getTime() - Date.now()
+      if (diff <= 0) {
+        setTimeLeft('00:00:00')
+        return
+      }
+      const h = Math.floor(diff / 3_600_000)
+      const m = Math.floor((diff % 3_600_000) / 60_000)
+      const s = Math.floor((diff % 60_000) / 1000)
+      setTimeLeft(
+        `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+      )
+    }
+
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [expiresAt])
+
+  return timeLeft
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Page component
+   ═══════════════════════════════════════════════════════════════ */
 
 const Discovery = () => {
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [matches, setMatches] = useState<PotentialMatch[]>([])
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [animating, setAnimating] = useState(false)
-  const [matchPopup, setMatchPopup] = useState<any>(null)
+  const {
+    dailyPicks,
+    expiresAt,
+    passedIds,
+    interestedIds,
+    loading,
+    error,
+    loadPicks,
+    markInterest,
+    markPass,
+  } = useDiscoveryStore()
 
-  // Vibe tag filter state
-  const [allVibeTags, setAllVibeTags] = useState<VibeTag[]>([])
-  const [selectedFilterTags, setSelectedFilterTags] = useState<Set<string>>(new Set())
-  const [showVibeFilter, setShowVibeFilter] = useState(false)
+  const [celebrationMatch, setCelebrationMatch] = useState<{
+    currentUser: { firstName: string; photoUrl: string }
+    matchedUser: { firstName: string; photoUrl: string }
+    matchId: string
+  } | null>(null)
 
-  // Load vibe tags for filter
-  useEffect(() => {
-    vibeTagService.getAll().then((grouped) => {
-      setAllVibeTags(Object.values(grouped).flat())
-    }).catch(() => {})
-  }, [])
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
 
+  const countdown = useCountdown(expiresAt)
+
+  // Redirect if not authenticated
   useEffect(() => {
     if (!user) {
       navigate('/login')
       return
     }
+    loadPicks()
+  }, [user, navigate, loadPicks])
 
-    fetchMatches()
-  }, [user, navigate])
+  // Visible picks = those not yet acted on
+  const actedOnIds = useMemo(
+    () => new Set([...passedIds, ...interestedIds]),
+    [passedIds, interestedIds]
+  )
 
-  const fetchMatches = useCallback(async (vibeTagIds?: string[]) => {
-    setLoading(true)
-    setError(null)
+  const visiblePicks = useMemo(
+    () => dailyPicks.filter((p) => !actedOnIds.has(p.id)),
+    [dailyPicks, actedOnIds]
+  )
 
-    try {
-      const tagFilter = vibeTagIds || Array.from(selectedFilterTags)
-      const response = await getPotentialMatches(1, 20, 0, 'compatibility', undefined, false, tagFilter.length > 0 ? tagFilter : undefined)
-      setMatches(response.users)
-      setCurrentIndex(0)
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Error fetching matches')
-    } finally {
-      setLoading(false)
-    }
-  }, [selectedFilterTags])
+  const remainingCount = visiblePicks.length
 
-  const handleToggleFilterTag = (tagId: string) => {
-    setSelectedFilterTags((prev) => {
-      const next = new Set(prev)
-      if (next.has(tagId)) {
-        next.delete(tagId)
-      } else {
-        next.add(tagId)
-      }
-      // Re-fetch with new filter
-      const tagIds = Array.from(next)
-      fetchMatches(tagIds)
-      return next
-    })
-  }
+  /* ── Actions ── */
+  const handleInterest = useCallback(
+    async (pick: DailyPick) => {
+      if (actionLoading) return
+      setActionLoading(pick.id)
 
-  const clearFilters = () => {
-    setSelectedFilterTags(new Set())
-    fetchMatches([])
-  }
+      try {
+        const res = await expressInterest(pick.id)
+        markInterest(pick.id)
 
-  const handleLike = async () => {
-    if (animating || currentIndex >= matches.length) return
-
-    const currentUser = matches[currentIndex]
-    setAnimating(true)
-
-    try {
-      const response = await likeUser(currentUser.id)
-
-      // Show match popup if it's a mutual match
-      if (response.isMatch) {
-        setMatchPopup(response.match)
-        // Auto-close after 8 seconds
-        setTimeout(() => setMatchPopup(null), 8000)
-      }
-
-      // Animate card out to the right
-      setTimeout(() => {
-        setCurrentIndex((prev) => prev + 1)
-        setAnimating(false)
-
-        // Load more matches if running low
-        if (currentIndex >= matches.length - 3) {
-          fetchMatches()
+        if (res.isMatch && res.match) {
+          const matchedUser = res.match.user1?.id === user?.id ? res.match.user2 : res.match.user1
+          setCelebrationMatch({
+            currentUser: {
+              firstName: user?.firstName ?? '',
+              photoUrl: user?.profilePictures?.[0] ?? '',
+            },
+            matchedUser: {
+              firstName: matchedUser?.firstName ?? pick.firstName,
+              photoUrl: matchedUser?.profilePictures?.[0] ?? pick.profilePictures?.[0] ?? '',
+            },
+            matchId: res.match.id,
+          })
         }
-      }, 300)
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Error liking user')
-      setAnimating(false)
-    }
-  }
+      } catch {
+        // Silently mark as interested even if server fails to avoid blocking UX
+        markInterest(pick.id)
+      } finally {
+        setActionLoading(null)
+      }
+    },
+    [actionLoading, markInterest, user]
+  )
 
-  const handlePass = async () => {
-    if (animating || currentIndex >= matches.length) return
+  const handlePass = useCallback(
+    async (pick: DailyPick) => {
+      if (actionLoading) return
+      setActionLoading(pick.id)
+      markPass(pick.id)
 
-    const currentUser = matches[currentIndex]
-    setAnimating(true)
+      try {
+        await passUser(pick.id)
+      } catch {
+        // Pass is already marked locally
+      } finally {
+        setActionLoading(null)
+      }
+    },
+    [actionLoading, markPass]
+  )
 
-    try {
-      await passUser(currentUser.id)
-
-      // Animate card out to the left
-      setTimeout(() => {
-        setCurrentIndex((prev) => prev + 1)
-        setAnimating(false)
-
-        // Load more matches if running low
-        if (currentIndex >= matches.length - 3) {
-          fetchMatches()
-        }
-      }, 300)
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Error passing on user')
-      setAnimating(false)
-    }
-  }
-
-  if (loading) {
+  /* ── Loading state ── */
+  if (loading && dailyPicks.length === 0) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-primary-500 mx-auto mb-4" />
-          <p className="text-gray-600">Finding your perfect matches...</p>
+          <Loader2 className="w-10 h-10 animate-spin text-primary-forest dark:text-primary-sage mx-auto mb-4" />
+          <p className="text-[var(--color-text-secondary)] font-medium">
+            Curating today's picks...
+          </p>
         </div>
       </div>
     )
   }
 
-  if (error) {
+  /* ── Error state ── */
+  if (error && dailyPicks.length === 0) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4">
-        <div className="card max-w-md text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">Oops!</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button onClick={() => fetchMatches()} className="btn-primary">
-            Try Again
+        <div className="max-w-sm w-full rounded-2xl bg-[var(--color-surface-raised)] shadow-card p-8 text-center">
+          <p className="text-[var(--color-text-secondary)] mb-4">{error}</p>
+          <button
+            onClick={loadPicks}
+            className="px-6 py-2.5 rounded-xl bg-primary-forest text-white font-semibold hover:bg-primary-forest/90 transition-colors"
+          >
+            Try again
           </button>
         </div>
       </div>
     )
   }
 
-  if (matches.length === 0 || currentIndex >= matches.length) {
+  /* ── Empty state ── */
+  if (remainingCount === 0) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4">
-        <div className="card max-w-md text-center">
-          <div className="w-20 h-20 bg-gradient-to-r from-primary-100 to-secondary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Heart className="w-10 h-10 text-primary-600" />
+        <div className="max-w-sm w-full text-center space-y-6">
+          <div className="w-24 h-24 mx-auto rounded-full bg-primary-light dark:bg-primary-forest/20 flex items-center justify-center">
+            <Moon className="w-10 h-10 text-primary-forest dark:text-primary-sage" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">
-            <span className="gradient-text">No More Matches</span>
-          </h2>
-          <p className="text-gray-600 mb-6">
-            You've seen all potential matches! Check back later or adjust your preferences.
-          </p>
-          <button
-            onClick={() => navigate('/profile/edit')}
-            className="btn-primary mb-2"
-          >
-            Update Preferences
-          </button>
-          <button
-            onClick={() => fetchMatches()}
-            className="btn-secondary flex items-center gap-2 mx-auto"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-        </div>
-      </div>
-    )
-  }
 
-  const currentUser = matches[currentIndex]
-  const nextUser = currentIndex + 1 < matches.length ? matches[currentIndex + 1] : null
+          <div>
+            <h2 className="text-xl font-semibold text-[var(--color-text)] mb-2">
+              You've seen everyone today
+            </h2>
+            <p className="text-[var(--color-text-secondary)]">
+              Come back tomorrow for a fresh set of picks.
+            </p>
+          </div>
 
-  return (
-    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-primary-50 via-white to-secondary-50 py-8">
-      <div className="max-w-md mx-auto px-4">
-        {/* Header */}
-        <div className="text-center mb-4">
-          <h1 className="text-3xl font-bold">
-            <span className="gradient-text">Discover</span>
-          </h1>
-          <p className="text-gray-600 mt-1">
-            {matches.length - currentIndex} potential {matches.length - currentIndex === 1 ? 'match' : 'matches'}
-          </p>
-        </div>
-
-        {/* Vibe Tag Filter */}
-        <div className="mb-4">
-          <button
-            onClick={() => setShowVibeFilter(!showVibeFilter)}
-            className="flex items-center gap-2 mx-auto px-4 py-2 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:border-primary-400 hover:text-primary-500 transition-colors"
-          >
-            <Filter className="w-4 h-4" />
-            Filter by Vibe
-            {selectedFilterTags.size > 0 && (
-              <span className="bg-primary-400 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
-                {selectedFilterTags.size}
+          {countdown && (
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-cream dark:bg-neutral-almostBlack">
+              <Clock className="w-4 h-4 text-[var(--color-text-tertiary)]" />
+              <span className="text-sm font-mono font-semibold text-[var(--color-text)] tabular-nums">
+                {countdown}
               </span>
-            )}
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showVibeFilter ? 'rotate-180' : ''}`} />
-          </button>
-
-          <AnimatePresence>
-            {showVibeFilter && allVibeTags.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden mt-3"
-              >
-                <div className="card p-4">
-                  <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-                    {allVibeTags.map((tag) => {
-                      const isActive = selectedFilterTags.has(tag.id)
-                      return (
-                        <button
-                          key={tag.id}
-                          onClick={() => handleToggleFilterTag(tag.id)}
-                          className={[
-                            'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all',
-                            isActive
-                              ? 'bg-primary-400 text-white shadow-sm'
-                              : 'bg-gray-100 text-gray-600 hover:bg-primary-50 hover:text-primary-600',
-                          ].join(' ')}
-                        >
-                          <span>{tag.emoji}</span>
-                          <span>{tag.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {selectedFilterTags.size > 0 && (
-                    <button
-                      onClick={clearFilters}
-                      className="mt-2 text-xs font-semibold text-gray-500 hover:text-primary-500 transition-colors"
-                    >
-                      Clear all filters
-                    </button>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Card Stack */}
-        <div className="relative h-[calc(100vh-280px)] min-h-[400px] max-h-[600px] mb-4">
-          {/* Next Card (background) */}
-          {nextUser && (
-            <MatchCard
-              user={nextUser}
-              onLike={() => {}}
-              onPass={() => {}}
-              style={{
-                transform: 'scale(0.95)',
-                opacity: 0.5,
-                zIndex: 1,
-              }}
-            />
+            </div>
           )}
 
-          {/* Current Card */}
-          <MatchCard
-            user={currentUser}
-            onLike={handleLike}
-            onPass={handlePass}
-            style={{
-              zIndex: 2,
-              transition: animating ? 'transform 0.3s ease-out' : 'none',
-            }}
-          />
+          {/* Illustration placeholder */}
+          <div className="w-48 h-32 mx-auto rounded-2xl bg-accent-warm/40 dark:bg-accent-terracotta/10 flex items-center justify-center">
+            <span className="text-4xl">🌙</span>
+          </div>
         </div>
+      </div>
+    )
+  }
 
-        {/* Instructions */}
-        <div className="text-center text-sm text-gray-500">
-          <p>Tap the heart to like, or the X to pass</p>
+  /* ── Main feed ── */
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-[var(--color-surface)]">
+      {/* ── Header ── */}
+      <div className="sticky top-0 z-20 bg-[var(--color-surface)]/95 backdrop-blur-md border-b border-primary-sage/15 dark:border-primary-sage/10">
+        <div className="max-w-[440px] mx-auto px-4 py-3 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-semibold text-[var(--color-text)]">
+              Today's Picks
+              <span className="ml-2 text-sm font-normal text-[var(--color-text-tertiary)]">
+                · {remainingCount} left
+              </span>
+            </h1>
+          </div>
+
+          {countdown && (
+            <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-tertiary)]">
+              <Clock className="w-3.5 h-3.5" />
+              <span className="font-mono tabular-nums">{countdown}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Match Popup */}
-      {matchPopup && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setMatchPopup(null)
-          }}
-        >
-          <div className="card max-w-sm w-full text-center relative animate-scaleIn">
-            {/* Close button */}
-            <button
-              onClick={() => setMatchPopup(null)}
-              className="absolute top-4 right-4 p-1 rounded-full hover:bg-gray-100 transition-colors"
+      {/* ── Feed ── */}
+      <div className="max-w-[440px] mx-auto pb-8">
+        <AnimatePresence mode="popLayout">
+          {visiblePicks.map((pick, i) => (
+            <motion.div
+              key={pick.id}
+              layout
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+              transition={{
+                type: 'spring',
+                stiffness: 260,
+                damping: 24,
+                delay: i * 0.04,
+              }}
+              className="pt-6"
             >
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
+              <div className="rounded-3xl bg-[var(--color-surface-raised)] shadow-card overflow-hidden">
+                <ProfileCard
+                  profile={toProfileData(pick)}
+                  exchangeCount={pick.exchangeCount}
+                  onInterest={() => handleInterest(pick)}
+                  onPass={() => handlePass(pick)}
+                  inline
+                />
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
 
-            <div className="w-24 h-24 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-              <Heart className="w-12 h-12 text-white" fill="currentColor" />
-            </div>
-            <h2 className="text-3xl font-bold mb-2">
-              <span className="gradient-text">It's a Match!</span>
-            </h2>
-            <p className="text-gray-600 mb-4">
-              You and {matchPopup.user2?.firstName} liked each other!
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setMatchPopup(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all"
-              >
-                Keep Swiping
-              </button>
-              <button
-                onClick={() => navigate('/messages')}
-                className="flex-1 btn-primary"
-              >
-                Send Message
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Match celebration modal ── */}
+      <MatchCelebration
+        isOpen={!!celebrationMatch}
+        currentUser={celebrationMatch?.currentUser ?? { firstName: '', photoUrl: '' }}
+        matchedUser={celebrationMatch?.matchedUser ?? { firstName: '', photoUrl: '' }}
+        onSendMessage={() => {
+          setCelebrationMatch(null)
+          navigate('/messages')
+        }}
+        onKeepBrowsing={() => setCelebrationMatch(null)}
+      />
     </div>
   )
 }

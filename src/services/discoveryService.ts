@@ -1,5 +1,76 @@
 import api from './api'
 
+/* ═══════════════════════════════════════════════════════════════
+   Daily Picks
+   ═══════════════════════════════════════════════════════════════ */
+
+export interface DailyPick {
+  id: string
+  firstName: string
+  lastName: string
+  dateOfBirth: string
+  gender: string
+  lookingFor: string
+  bio?: string
+  locationCity?: string
+  locationCountry?: string
+  profilePictures: string[]
+  hobbies: string[]
+  talents: string[]
+  interests: string[]
+  vibeTags?: VibeTagData[]
+  intention?: string
+  redFlag?: string
+  greenFlag?: string
+  currentlyObsessedWith?: string
+  voiceIntroUrl?: string
+  voiceIntroDuration?: number
+  compatibility: number
+  distance?: number | null
+  distanceText?: string | null
+  exchangeCount: number
+  isOnline?: boolean
+  lastActive?: string
+}
+
+export interface DailyPicksResponse {
+  picks: DailyPick[]
+  total: number
+  expiresAt: string
+}
+
+export interface ExpressInterestResponse {
+  message: string
+  isMatch: boolean
+  match?: {
+    id: string
+    userId1: string
+    userId2: string
+    user1?: { id: string; firstName: string; profilePictures: string[] }
+    user2?: { id: string; firstName: string; profilePictures: string[] }
+  }
+}
+
+/**
+ * Get today's curated daily picks (max 8 per day)
+ */
+export const getDailyPicks = async (): Promise<DailyPicksResponse> => {
+  const response = await api.get<DailyPicksResponse>('/discovery/daily-picks')
+  return response.data
+}
+
+/**
+ * Express interest in a user from daily picks
+ */
+export const expressInterest = async (userId: string): Promise<ExpressInterestResponse> => {
+  const response = await api.post<ExpressInterestResponse>('/matches/express-interest', { userId })
+  return response.data
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Legacy discovery types & functions
+   ═══════════════════════════════════════════════════════════════ */
+
 export interface VibeTagData {
   id: string
   label: string

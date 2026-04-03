@@ -1,18 +1,15 @@
 import api from './api'
 
+export type VibeTagCategory = 'LIFESTYLE' | 'PERSONALITY' | 'INTERESTS' | 'VALUES' | 'DATING_STYLE' | 'HUMOUR'
+
 export interface VibeTag {
   id: string
   label: string
   emoji: string
-  category: 'LIFESTYLE' | 'PERSONALITY' | 'INTERESTS' | 'VALUES'
+  category: VibeTagCategory
 }
 
-export interface VibeTagsGrouped {
-  LIFESTYLE?: VibeTag[]
-  PERSONALITY?: VibeTag[]
-  INTERESTS?: VibeTag[]
-  VALUES?: VibeTag[]
-}
+export type VibeTagsGrouped = Partial<Record<VibeTagCategory, VibeTag[]>>
 
 export const vibeTagService = {
   /** GET /api/vibe-tags — all active tags grouped by category */
@@ -27,7 +24,7 @@ export const vibeTagService = {
     return response.data.vibeTags
   },
 
-  /** PUT /api/users/me/vibe-tags — update user's selected tags */
+  /** PUT /api/users/me/vibe-tags — update user's selected tags (3-5 required) */
   update: async (tagIds: string[]): Promise<VibeTag[]> => {
     const response = await api.put<{ vibeTags: VibeTag[] }>('/users/me/vibe-tags', { tagIds })
     return response.data.vibeTags

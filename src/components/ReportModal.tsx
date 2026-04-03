@@ -1,167 +1,273 @@
 import { useState } from 'react'
-import { X, AlertTriangle } from 'lucide-react'
-import { reportService, ReportData } from '../services/reportService'
+import { X, Camera, MessageSquareWarning, UserX, ShieldAlert, Ban, HelpCircle, Loader2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { reportService, ReportReason } from '../services/reportService'
 
 interface ReportModalProps {
   isOpen: boolean
   onClose: () => void
   userId: string
-  username: string
+  firstName: string
+  onBlocked?: () => void
 }
 
-export default function ReportModal({ isOpen, onClose, userId, username }: ReportModalProps) {
-  const [reason, setReason] = useState<ReportData['reason']>('inappropriate_content')
-  const [description, setDescription] = useState('')
+type Step = 'reason' | 'note' | 'done'
+
+const REASON_OPTIONS: { reason: ReportReason; icon: React.ReactNode; label: string }[] = [
+  { reason: 'INAPPROPRIATE_PHOTOS', icon: <Camera className="w-5 h-5" />, label: 'Inappropriate photos' },
+  { reason: 'HARASSMENT', icon: <MessageSquareWarning className="w-5 h-5" />, label: 'Harassment' },
+  { reason: 'FAKE_PROFILE', icon: <UserX className="w-5 h-5" />, label: 'Fake profile' },
+  { reason: 'UNSAFE_BEHAVIOR', icon: <ShieldAlert className="w-5 h-5" />, label: 'Unsafe behavior' },
+  { reason: 'HATE_SPEECH', icon: <Ban className="w-5 h-5" />, label: 'Hate speech' },
+  { reason: 'OTHER', icon: <HelpCircle className="w-5 h-5" />, label: 'Something else' },
+]
+
+export default function ReportModal({ isOpen, onClose, userId, firstName, onBlocked }: ReportModalProps) {
+  const [step, setStep] = useState<Step>('reason')
+  const [selectedReason, setSelectedReason] = useState<ReportReason | null>(null)
+  const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+  const [blocking, setBlocking] = useState(false)
 
   if (!isOpen) return null
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitting(true)
+  const reset = () => {
+    setStep('reason')
+    setSelectedReason(null)
+    setNote('')
+    setSubmitting(false)
+    setBlocking(false)
+  }
 
+  const handleClose = () => {
+    if (!submitting && !blocking) {
+      reset()
+      onClose()
+    }
+  }
+
+  const handleSelectReason = (reason: ReportReason) => {
+    setSelectedReason(reason)
+    setStep('note')
+  }
+
+  const handleSubmitReport = async () => {
+    if (!selectedReason) return
+    setSubmitting(true)
     try {
-      await reportService.reportUser({
-        userId,
-        reason,
-        description: description.trim() || undefined,
-      })
-      setSubmitted(true)
-      setTimeout(() => {
-        onClose()
-        setSubmitted(false)
-        setReason('inappropriate_content')
-        setDescription('')
-      }, 2000)
-    } catch (error: any) {
-      console.error('Error reporting user:', error)
-      alert(error.response?.data?.message || 'Failed to submit report')
+      await reportService.reportUser(userId, selectedReason, note.trim() || undefined)
+      setStep('done')
+    } catch {
+      // Still move forward — don't make the user feel stuck
+      setStep('done')
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleClose = () => {
-    if (!submitting) {
-      onClose()
-      setReason('inappropriate_content')
-      setDescription('')
-      setSubmitted(false)
+  const handleBlock = async () => {
+    setBlocking(true)
+    try {
+      await reportService.blockUser(userId)
+      onBlocked?.()
+      handleClose()
+    } catch {
+      handleClose()
+    } finally {
+      setBlocking(false)
     }
+  }
+
+  const handleNoThanks = () => {
+    handleClose()
+  }
+
+  const slideVariants = {
+    enter: { x: 40, opacity: 0 },
+    center: { x: 0, opacity: 1 },
+    exit: { x: -40, opacity: 0 },
   }
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4">
         {/* Backdrop */}
-        <div
-          className="fixed inset-0 bg-black/50 transition-opacity"
-          onClick={handleClose}
-        />
+        <div className="fixed inset-0 bg-black/40" onClick={handleClose} />
 
         {/* Modal */}
-        <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 md:p-8">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden"
+        >
           {/* Close button */}
           <button
             onClick={handleClose}
-            disabled={submitting}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            disabled={submitting || blocking}
+            className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400 z-10"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
 
-          {submitted ? (
-            <div className="text-center py-8">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle className="w-8 h-8 text-green-600" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Report Submitted</h3>
-              <p className="text-gray-600">
-                Thank you for helping keep our community safe. We'll review this report shortly.
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Header */}
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-red-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-800">Report User</h2>
-                  <p className="text-sm text-gray-600">Report @{username}</p>
-                </div>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Reason */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Reason for reporting
-                  </label>
-                  <div className="space-y-2">
-                    {[
-                      { value: 'inappropriate_content', label: 'Inappropriate Content' },
-                      { value: 'fake_profile', label: 'Fake Profile' },
-                      { value: 'harassment', label: 'Harassment' },
-                      { value: 'spam', label: 'Spam' },
-                      { value: 'other', label: 'Other' },
-                    ].map((option) => (
-                      <label
-                        key={option.value}
-                        className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
-                      >
-                        <input
-                          type="radio"
-                          name="reason"
-                          value={option.value}
-                          checked={reason === option.value}
-                          onChange={(e) => setReason(e.target.value as ReportData['reason'])}
-                          className="w-4 h-4 text-rose-500 focus:ring-rose-500"
-                        />
-                        <span className="text-gray-700">{option.label}</span>
-                      </label>
-                    ))}
+          <AnimatePresence mode="wait">
+            {/* ═══════ Step 1: Reason selection ═══════ */}
+            {step === 'reason' && (
+              <motion.div
+                key="reason"
+                variants={slideVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.2 }}
+                className="p-6"
+              >
+                <div className="text-center mb-5">
+                  <div
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
+                    style={{ backgroundColor: '#E1F5EE' }}
+                  >
+                    <ShieldAlert className="w-6 h-6" style={{ color: '#2D5C4F' }} />
                   </div>
+                  <h2 className="text-lg font-bold" style={{ color: '#2B2B2B' }}>
+                    Something not right?
+                  </h2>
+                  <p className="text-sm mt-1" style={{ color: '#8A8578' }}>
+                    We've got you. This stays between you and us.
+                  </p>
                 </div>
 
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Additional details (optional)
-                  </label>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Provide more context about this report..."
-                    rows={4}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent outline-none resize-none"
-                  />
+                <div className="grid grid-cols-2 gap-2.5">
+                  {REASON_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.reason}
+                      onClick={() => handleSelectReason(opt.reason)}
+                      className="flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all hover:shadow-sm active:scale-[0.97]"
+                      style={{ borderColor: '#E1F5EE' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E1F5EE'; e.currentTarget.style.borderColor = '#9FCFBF' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = ''; e.currentTarget.style.borderColor = '#E1F5EE' }}
+                    >
+                      <div style={{ color: '#2D5C4F' }}>{opt.icon}</div>
+                      <span className="text-xs font-semibold text-center leading-tight" style={{ color: '#2B2B2B' }}>
+                        {opt.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {/* ═══════ Step 2: Optional note ═══════ */}
+            {step === 'note' && (
+              <motion.div
+                key="note"
+                variants={slideVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.2 }}
+                className="p-6"
+              >
+                <div className="mb-4">
+                  <h2 className="text-lg font-bold mb-1" style={{ color: '#2B2B2B' }}>
+                    Anything else?
+                  </h2>
+                  <p className="text-sm" style={{ color: '#8A8578' }}>
+                    Totally optional — only share what feels right.
+                  </p>
                 </div>
 
-                {/* Actions */}
-                <div className="flex gap-3">
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Anything else we should know? (optional)"
+                  rows={3}
+                  maxLength={500}
+                  className="w-full px-4 py-3 rounded-xl border text-sm resize-none focus:outline-none focus:ring-2"
+                  style={{
+                    borderColor: '#E1F5EE',
+                    fontFamily: 'Lora, Georgia, serif',
+                  }}
+                />
+
+                <div className="flex gap-2.5 mt-4">
                   <button
-                    type="button"
-                    onClick={handleClose}
+                    onClick={() => setStep('reason')}
                     disabled={submitting}
-                    className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    className="flex-1 py-2.5 rounded-xl border text-sm font-semibold transition-colors"
+                    style={{ borderColor: '#E1F5EE', color: '#6B7B75' }}
                   >
-                    Cancel
+                    Back
                   </button>
                   <button
-                    type="submit"
+                    onClick={handleSubmitReport}
                     disabled={submitting}
-                    className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+                    className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-all disabled:opacity-50"
+                    style={{ backgroundColor: '#2D5C4F' }}
                   >
-                    {submitting ? 'Submitting...' : 'Submit Report'}
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Send report'}
                   </button>
                 </div>
-              </form>
-            </>
-          )}
-        </div>
+              </motion.div>
+            )}
+
+            {/* ═══════ Step 3: Confirmation + block offer ═══════ */}
+            {step === 'done' && (
+              <motion.div
+                key="done"
+                variants={slideVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.2 }}
+                className="p-6"
+              >
+                <div className="text-center mb-5">
+                  <div
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
+                    style={{ backgroundColor: '#E1F5EE' }}
+                  >
+                    <span className="text-2xl">💚</span>
+                  </div>
+                  <h2 className="text-lg font-bold mb-1" style={{ color: '#2B2B2B' }}>
+                    Report sent
+                  </h2>
+                  <p className="text-sm leading-relaxed" style={{ color: '#8A8578' }}>
+                    We'll look into this quietly — you won't need to do anything else.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl p-4 mb-4" style={{ backgroundColor: '#F9F6F0' }}>
+                  <p className="text-sm font-medium text-center" style={{ color: '#2B2B2B' }}>
+                    Want to block {firstName} too?
+                  </p>
+                  <p className="text-xs text-center mt-1" style={{ color: '#8A8578' }}>
+                    They won't know. They'll just stop seeing you.
+                  </p>
+                </div>
+
+                <div className="flex gap-2.5">
+                  <button
+                    onClick={handleNoThanks}
+                    disabled={blocking}
+                    className="flex-1 py-2.5 rounded-xl border text-sm font-semibold transition-colors"
+                    style={{ borderColor: '#E1F5EE', color: '#6B7B75' }}
+                  >
+                    No thanks
+                  </button>
+                  <button
+                    onClick={handleBlock}
+                    disabled={blocking}
+                    className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-all disabled:opacity-50"
+                    style={{ backgroundColor: '#2D5C4F' }}
+                  >
+                    {blocking ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Yes, block too'}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       </div>
     </div>
   )

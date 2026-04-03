@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -9,8 +9,10 @@ import {
   MessageCircle,
   Settings,
   LogOut,
+  Shield,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
+import SafetyBottomSheet from '../SafetyBottomSheet'
 
 /* ── Types ── */
 interface AppShellProps {
@@ -77,6 +79,7 @@ export default function AppShell({ children, rightPanel }: AppShellProps) {
   const location = useLocation()
   const { user, logout } = useAuthStore()
   const isActive = (path: string) => location.pathname === path
+  const [safetyOpen, setSafetyOpen] = useState(false)
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-surface)]">
@@ -97,8 +100,15 @@ export default function AppShell({ children, rightPanel }: AppShellProps) {
           ))}
         </nav>
 
-        {/* Bottom: avatar + logout */}
+        {/* Bottom: safety + avatar + logout */}
         <div className="flex flex-col items-center gap-2 mt-auto">
+          <button
+            onClick={() => setSafetyOpen(true)}
+            className="flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200 text-[var(--color-text-tertiary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-50)]"
+            aria-label="Safe Space"
+          >
+            <Shield className="w-5 h-5" />
+          </button>
           <Link
             to="/settings"
             className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-plum)] flex items-center justify-center text-white text-sm font-bold ring-2 ring-[var(--color-surface-raised)]"
@@ -162,6 +172,9 @@ export default function AppShell({ children, rightPanel }: AppShellProps) {
           })}
         </div>
       </nav>
+
+      {/* Safety Bottom Sheet */}
+      <SafetyBottomSheet isOpen={safetyOpen} onClose={() => setSafetyOpen(false)} />
     </div>
   )
 }

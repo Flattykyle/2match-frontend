@@ -21,21 +21,21 @@ interface ButtonProps {
 /* ── Style maps ── */
 const variantStyles: Record<ButtonVariant, string> = {
   primary: [
-    'bg-[var(--color-primary)] text-white',
-    'hover:bg-[var(--color-primary-dark)]',
-    'shadow-primary-glow hover:shadow-lg',
+    'bg-primary-forest text-white',
+    'hover:bg-primary-forest/90',
+    'shadow-forest-glow hover:shadow-lg',
     'active:scale-[0.97]',
   ].join(' '),
 
   ghost: [
     'bg-transparent text-[var(--color-text)]',
-    'hover:bg-black/5 dark:hover:bg-white/10',
-    'border border-gray-200 dark:border-gray-700',
+    'hover:bg-primary-light dark:hover:bg-white/10',
+    'border border-primary-sage/40 dark:border-primary-sage/20',
   ].join(' '),
 
   danger: [
-    'bg-[var(--color-danger)] text-white',
-    'hover:bg-red-600',
+    'bg-danger text-white',
+    'hover:bg-danger/90',
     'shadow-sm hover:shadow-md',
   ].join(' '),
 }
@@ -80,9 +80,10 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         transition={{ type: 'spring' as const, stiffness: 400, damping: 17 }}
         disabled={isDisabled}
         className={[
-          'inline-flex items-center justify-center font-bold',
-          'transition-colors duration-[var(--transition-base)]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2',
+          'inline-flex items-center justify-center font-semibold',
+          'transition-colors duration-200',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-forest focus-visible:ring-offset-2',
+          'dark:focus-visible:ring-offset-neutral-darkBg',
           'disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none',
           variantStyles[variant],
           sizeStyles[size],

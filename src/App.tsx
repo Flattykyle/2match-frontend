@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { SocketProvider } from './context/SocketContext'
+import { PremiumGateProvider } from './context/PremiumGateContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import PageLoader from './components/PageLoader'
 import Layout from './components/Layout'
@@ -23,6 +24,7 @@ const BlockedUsers = lazy(() => import('./pages/BlockedUsers'))
 const Icebreaker = lazy(() => import('./pages/Icebreaker'))
 const SafetySettingsPage = lazy(() => import('./pages/SafetySettings'))
 const Upgrade = lazy(() => import('./pages/Upgrade'))
+const Onboarding = lazy(() => import('./pages/Onboarding'))
 
 // BEFORE: Single ErrorBoundary at the top — one route crash kills the entire app
 // AFTER: ErrorBoundary wraps each route-level component individually, so a crash
@@ -33,6 +35,7 @@ function App() {
   return (
     <ErrorBoundary>
       <SocketProvider>
+        <PremiumGateProvider>
         <Router>
           <Suspense fallback={<PageLoader />}>
             <Routes>
@@ -45,6 +48,10 @@ function App() {
                 <Route
                   path="register"
                   element={!isAuthenticated ? <ErrorBoundary><Register /></ErrorBoundary> : <Navigate to="/dashboard" />}
+                />
+                <Route
+                  path="onboarding"
+                  element={isAuthenticated ? <ErrorBoundary><Onboarding /></ErrorBoundary> : <Navigate to="/login" />}
                 />
                 <Route
                   path="dashboard"
@@ -106,6 +113,7 @@ function App() {
             </Routes>
           </Suspense>
         </Router>
+        </PremiumGateProvider>
       </SocketProvider>
     </ErrorBoundary>
   )

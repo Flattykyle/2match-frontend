@@ -1,4 +1,5 @@
-@import './styles/theme.css';
+@import './styles/design-tokens.css';
+@import './styles/globals.css';
 
 @tailwind base;
 @tailwind components;
@@ -8,7 +9,7 @@
   body {
     background-color: var(--color-surface);
     color: var(--color-text);
-    font-family: var(--font-family);
+    font-family: var(--font-family-sans);
     @apply min-h-screen antialiased;
   }
 }
@@ -56,6 +57,15 @@
   /* Prevent horizontal overflow */
   .overflow-x-clip {
     overflow-x: clip;
+  }
+
+  /* Hide scrollbar but keep scroll behavior */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 
   @keyframes fadeIn {

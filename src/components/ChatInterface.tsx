@@ -1,24 +1,44 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Send, Smile, Loader2, Lock, Check, CheckCheck, AlertTriangle } from 'lucide-react'
+import { Send, Smile, Loader2, Lock, Check, CheckCheck, AlertTriangle, Mic, MessageCircle, Music, MoreHorizontal, Flag, Ban } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import EmojiPicker, { EmojiClickData } from 'emoji-picker-react'
 import { getMessages, Message, Conversation, MessageReaction } from '../services/messageService'
 import { useSocket } from '../context/SocketContext'
 import { useAuthStore } from '../store/authStore'
 import { format } from 'date-fns'
+import SlowBurnChat from './SlowBurnChat'
+import VoicePlayer from './VoicePlayer'
+import VoiceRecorder from './VoiceRecorder'
+import PlaylistTab from './PlaylistTab'
+import { voiceMemoService } from '../services/voiceMemoService'
+import { safetyService, DateCheckin } from '../services/safetyService'
+import ReportModal from './ReportModal'
+import { reportService } from '../services/reportService'
 
 /* ── Types ── */
+interface MatchInfo {
+  id: string
+  slowBurnEnabled: boolean
+  chatUnlocked: boolean
+  exchangeCount: number
+}
+
 interface ChatInterfaceProps {
   conversation: Conversation
   isMobileFullScreen?: boolean
   icebreakerUnlocked?: boolean
+  matchInfo?: MatchInfo | null
 }
 
 const REACTION_EMOJIS = ['❤️', '😂', '👏', '😮', '😢', '🔥']
 const TYPING_TIMEOUT_MS = 3000
 
 /* ── Component ── */
-const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnlocked = true }: ChatInterfaceProps) => {
+const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnlocked = true, matchInfo = null }: ChatInterfaceProps) => {
+  const [slowBurnLocked, setSlowBurnLocked] = useState(
+    matchInfo?.slowBurnEnabled && !matchInfo?.chatUnlocked
+  )
+  const [activeTab, setActiveTab] = useState<'chat' | 'playlist'>('chat')
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
@@ -26,6 +46,15 @@ const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnl
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null)
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
+  const [holdTimer, setHoldTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
+  const [pendingCheckin, setPendingCheckin] = useState<DateCheckin | null>(null)
+  const [showCheckinButton, setShowCheckinButton] = useState(false)
+  const [safeToast, setSafeToast] = useState<string | null>(null)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [blocked, setBlocked] = useState(false)
+  const [blockToast, setBlockToast] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingAutoHideRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -126,6 +155,56 @@ const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnl
       if (typingAutoHideRef.current) clearTimeout(typingAutoHideRef.current)
     }
   }, [socket, conversation.id, conversation.otherUser.id, user?.id])
+
+  // Check for pending date check-in (show "Got home safe" button 4h after creation)
+  useEffect(() => {
+    const checkForPendingCheckin = async () => {
+      try {
+        const checkins = await safetyService.getDateCheckins()
+        const pending = checkins.find((c) => {
+          if (c.status !== 'PENDING') return false
+          const created = new Date(c.createdAt).getTime()
+          const fourHoursLater = created + 4 * 60 * 60 * 1000
+          return Date.now() >= fourHoursLater
+        })
+        if (pending) {
+          setPendingCheckin(pending)
+          setShowCheckinButton(true)
+        } else {
+          setShowCheckinButton(false)
+        }
+      } catch {
+        // silent
+      }
+    }
+    checkForPendingCheckin()
+  }, [conversation.id])
+
+  // Listen for partner's safety confirmation
+  useEffect(() => {
+    if (!socket || !matchInfo) return
+
+    const handleSafetyConfirmed = (data: { firstName: string; matchId: string }) => {
+      if (data.matchId === matchInfo.id) {
+        setSafeToast(`\uD83D\uDC9A ${data.firstName} is home safe`)
+        setTimeout(() => setSafeToast(null), 5000)
+      }
+    }
+
+    socket.on('safety:confirmed', handleSafetyConfirmed)
+    return () => { socket.off('safety:confirmed', handleSafetyConfirmed) }
+  }, [socket, matchInfo?.id])
+
+  const handleGotHomeSafe = async () => {
+    if (!pendingCheckin) return
+    try {
+      await safetyService.respondToDateCheckin(pendingCheckin.id)
+      setShowCheckinButton(false)
+      setPendingCheckin(null)
+    } catch {
+      // silent
+    }
+  }
 
   const loadMessages = async () => {
     try {
@@ -266,6 +345,48 @@ const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnl
     )
   }
 
+  // Slow Burn: if locked, render SlowBurnChat with crossfade
+  if (slowBurnLocked && matchInfo) {
+    return (
+      <div className="h-full flex flex-col">
+        {/* Chat Header */}
+        {!isMobileFullScreen && (
+          <div className="bg-white border-b border-gray-200 p-4 flex items-center space-x-3 flex-shrink-0">
+            {profilePic ? (
+              <img src={profilePic} alt={`${conversation.otherUser.firstName}'s profile`} className="w-10 h-10 rounded-full object-cover" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary-500 to-secondary-500 flex items-center justify-center text-white font-bold">
+                {conversation.otherUser.firstName.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div>
+              <h2 className="font-semibold text-gray-900">
+                {conversation.otherUser.firstName} {conversation.otherUser.lastName}
+              </h2>
+              <p className="text-sm text-gray-500">@{conversation.otherUser.username}</p>
+            </div>
+          </div>
+        )}
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key="slowburn"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="flex-1 min-h-0"
+          >
+            <SlowBurnChat
+              matchId={matchInfo.id}
+              onUnlocked={() => setSlowBurnLocked(false)}
+            />
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    )
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Chat Header */}
@@ -278,15 +399,93 @@ const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnl
               {conversation.otherUser.firstName.charAt(0).toUpperCase()}
             </div>
           )}
-          <div>
+          <div className="flex-1">
             <h2 className="font-semibold text-gray-900">
               {conversation.otherUser.firstName} {conversation.otherUser.lastName}
             </h2>
             <p className="text-sm text-gray-500">@{conversation.otherUser.username}</p>
           </div>
+          {/* "..." menu */}
+          <div className="relative">
+            <button
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <MoreHorizontal className="w-5 h-5 text-gray-400" />
+            </button>
+            <AnimatePresence>
+              {showMoreMenu && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9, y: -4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-30"
+                >
+                  <button
+                    onClick={() => { setShowMoreMenu(false); setShowReportModal(true) }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Flag className="w-4 h-4 text-gray-400" />
+                    Report
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setShowMoreMenu(false)
+                      try {
+                        await reportService.blockUser(conversation.otherUser.id)
+                        setBlocked(true)
+                        setBlockToast(true)
+                        setTimeout(() => setBlockToast(false), 3000)
+                      } catch {}
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                  >
+                    <Ban className="w-4 h-4" />
+                    Block
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       )}
 
+      {/* Tab switcher — Chat / Playlist */}
+      {matchInfo && (
+        <div className="flex border-b border-gray-200 flex-shrink-0 bg-white">
+          <button
+            onClick={() => setActiveTab('chat')}
+            className={`flex-1 py-2.5 text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1.5 ${
+              activeTab === 'chat'
+                ? 'text-primary-forest border-b-2 border-primary-forest'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            Messages
+          </button>
+          <button
+            onClick={() => setActiveTab('playlist')}
+            className={`flex-1 py-2.5 text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1.5 ${
+              activeTab === 'playlist'
+                ? 'text-primary-forest border-b-2 border-primary-forest'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <Music className="w-3.5 h-3.5" />
+            Playlist
+          </button>
+        </div>
+      )}
+
+      {/* Playlist tab */}
+      {activeTab === 'playlist' && matchInfo ? (
+        <div className="flex-1 min-h-0">
+          <PlaylistTab matchId={matchInfo.id} />
+        </div>
+      ) : (
+      <>
       {/* Expiry warning banner */}
       {expiryWarning?.expiresAt && (
         <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 flex items-center gap-2 text-amber-700 text-sm flex-shrink-0">
@@ -325,12 +524,23 @@ const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnl
                     onTouchEnd={handleMessagePressEnd}
                     className={`max-w-[85%] sm:max-w-xs lg:max-w-md xl:max-w-lg ${
                       isOwnMessage
-                        ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white'
+                        ? message.type === 'VOICE' ? 'bg-primary-forest/10' : 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white'
                         : 'bg-white text-gray-900'
                     } rounded-2xl px-3 sm:px-4 py-2 shadow-sm select-none`}
                   >
-                    <p className="break-words">{message.content}</p>
-                    <p className={`text-xs mt-1 flex items-center ${isOwnMessage ? 'text-white/70' : 'text-gray-500'}`}>
+                    {message.type === 'VOICE' && message.audioUrl ? (
+                      <div className="min-w-[200px] sm:min-w-[260px]">
+                        <VoicePlayer
+                          audioUrl={message.audioUrl}
+                          duration={message.audioDuration || 0}
+                          senderName={message.sender?.firstName}
+                          compact
+                        />
+                      </div>
+                    ) : (
+                      <p className="break-words">{message.content}</p>
+                    )}
+                    <p className={`text-xs mt-1 flex items-center ${isOwnMessage && message.type !== 'VOICE' ? 'text-white/70' : 'text-gray-500'}`}>
                       {formatMessageTime(message.sentAt)}
                       <ReadStatus message={message} />
                     </p>
@@ -405,6 +615,34 @@ const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnl
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Safety toast — partner got home safe */}
+      <AnimatePresence>
+        {safeToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="text-center py-2 text-sm font-semibold flex-shrink-0"
+            style={{ backgroundColor: '#E1F5EE', color: '#2D5C4F' }}
+          >
+            {safeToast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* "Got home safe" button — appears 4h after date check-in */}
+      {showCheckinButton && (
+        <div className="px-4 py-2 flex-shrink-0" style={{ backgroundColor: '#E1F5EE' }}>
+          <button
+            onClick={handleGotHomeSafe}
+            className="w-full py-2.5 rounded-xl text-white font-semibold text-sm transition-all active:scale-[0.98]"
+            style={{ backgroundColor: '#2D5C4F' }}
+          >
+            Got home safe \uD83D\uDC9A
+          </button>
+        </div>
+      )}
+
       {/* Message Input */}
       <div className="bg-white border-t border-gray-200 p-2 sm:p-4 relative flex-shrink-0">
         {!icebreakerUnlocked ? (
@@ -419,6 +657,29 @@ const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnl
                 <EmojiPicker onEmojiClick={handleEmojiClick} width="100%" />
               </div>
             )}
+
+            {/* Voice recorder panel */}
+            <AnimatePresence>
+              {showVoiceRecorder && matchInfo && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden mb-2"
+                >
+                  <VoiceRecorder
+                    maxDuration={60}
+                    label="Hold to record, release to stop"
+                    onConfirm={async (blob, onProgress) => {
+                      await voiceMemoService.sendVoiceMessage(matchInfo.id, blob, onProgress)
+                      setShowVoiceRecorder(false)
+                    }}
+                    onCancel={() => setShowVoiceRecorder(false)}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
               <button
@@ -438,6 +699,48 @@ const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnl
                 disabled={sending}
               />
 
+              {/* Hold-to-record mic button */}
+              {matchInfo && !newMessage.trim() && (
+                <button
+                  type="button"
+                  onMouseDown={() => {
+                    const timer = setTimeout(() => {
+                      setShowVoiceRecorder(true)
+                    }, 300)
+                    setHoldTimer(timer)
+                  }}
+                  onMouseUp={() => {
+                    if (holdTimer) {
+                      clearTimeout(holdTimer)
+                      setHoldTimer(null)
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (holdTimer) {
+                      clearTimeout(holdTimer)
+                      setHoldTimer(null)
+                    }
+                  }}
+                  onTouchStart={() => {
+                    const timer = setTimeout(() => {
+                      setShowVoiceRecorder(true)
+                    }, 300)
+                    setHoldTimer(timer)
+                  }}
+                  onTouchEnd={() => {
+                    if (holdTimer) {
+                      clearTimeout(holdTimer)
+                      setHoldTimer(null)
+                    }
+                  }}
+                  className="p-2 rounded-full transition-colors"
+                  style={{ color: '#2D5C4F' }}
+                  title="Hold to record voice message"
+                >
+                  <Mic className="w-6 h-6" />
+                </button>
+              )}
+
               <button
                 type="submit"
                 disabled={!newMessage.trim() || sending}
@@ -449,6 +752,36 @@ const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnl
           </>
         )}
       </div>
+      </>
+      )}
+
+      {/* Block toast */}
+      <AnimatePresence>
+        {blockToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full shadow-lg text-sm font-semibold"
+            style={{ backgroundColor: '#2D5C4F', color: '#fff' }}
+          >
+            Done. You're safe.
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Report modal */}
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        userId={conversation.otherUser.id}
+        firstName={conversation.otherUser.firstName}
+        onBlocked={() => {
+          setBlocked(true)
+          setBlockToast(true)
+          setTimeout(() => setBlockToast(false), 3000)
+        }}
+      />
     </div>
   )
 }

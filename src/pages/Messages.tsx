@@ -5,8 +5,16 @@ import ConversationsList from '../components/ConversationsList'
 import ChatInterface from '../components/ChatInterface'
 import { Conversation, ChatRequest, getChatRequests, acceptChatRequest, declineChatRequest } from '../services/messageService'
 import { formatDistanceToNow } from 'date-fns'
+import api from '../services/api'
 
 type Tab = 'inbox' | 'requests'
+
+interface MatchInfo {
+  id: string
+  slowBurnEnabled: boolean
+  chatUnlocked: boolean
+  exchangeCount: number
+}
 
 const Messages = () => {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
@@ -14,6 +22,39 @@ const Messages = () => {
   const [requests, setRequests] = useState<ChatRequest[]>([])
   const [requestsLoading, setRequestsLoading] = useState(false)
   const [processingId, setProcessingId] = useState<string | null>(null)
+  const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null)
+
+  // Fetch match info when conversation changes (for slow burn check)
+  useEffect(() => {
+    const fetchMatchInfo = async () => {
+      if (!selectedConversation) {
+        setMatchInfo(null)
+        return
+      }
+      try {
+        const response = await api.get('/matches')
+        const matches = response.data as any[]
+        const otherUserId = selectedConversation.otherUser.id
+        const match = matches.find(
+          (m: any) =>
+            (m.userId1 === otherUserId || m.userId2 === otherUserId)
+        )
+        if (match) {
+          setMatchInfo({
+            id: match.id,
+            slowBurnEnabled: match.slowBurnEnabled,
+            chatUnlocked: match.chatUnlocked,
+            exchangeCount: match.exchangeCount,
+          })
+        } else {
+          setMatchInfo(null)
+        }
+      } catch {
+        setMatchInfo(null)
+      }
+    }
+    fetchMatchInfo()
+  }, [selectedConversation?.id])
 
   useEffect(() => {
     if (activeTab === 'requests') loadRequests()
@@ -87,7 +128,7 @@ const Messages = () => {
             </div>
           </div>
           <div className="flex-1 min-h-0">
-            <ChatInterface conversation={selectedConversation} isMobileFullScreen={true} />
+            <ChatInterface conversation={selectedConversation} isMobileFullScreen={true} matchInfo={matchInfo} />
           </div>
         </div>
       )}
@@ -220,7 +261,7 @@ const Messages = () => {
               {/* Desktop Chat Interface */}
               <div className="hidden lg:block lg:col-span-2 h-full">
                 {selectedConversation ? (
-                  <ChatInterface conversation={selectedConversation} />
+                  <ChatInterface conversation={selectedConversation} matchInfo={matchInfo} />
                 ) : (
                   <div className="h-full flex items-center justify-center">
                     <div className="text-center p-4">

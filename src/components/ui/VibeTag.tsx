@@ -11,7 +11,7 @@ interface VibeTagProps {
 
 const variantStyles: Record<VibeTagProps['variant'] & string, string> = {
   default: 'bg-[var(--color-primary-50)] text-[var(--color-primary-700)] dark:bg-secondary-800 dark:text-primary-300',
-  active: 'bg-[var(--color-primary)] text-white shadow-sm',
+  active: 'bg-accent-terracotta text-white shadow-sm',
   muted: 'bg-gray-100 text-[var(--color-text-tertiary)] dark:bg-gray-800 dark:text-gray-500',
 }
 

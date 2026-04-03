@@ -1,59 +1,79 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
-import { vibeTagService, VibeTag, VibeTagsGrouped } from '../../services/vibeTagService'
+import { vibeTagService, VibeTag, VibeTagsGrouped, VibeTagCategory } from '../../services/vibeTagService'
 
 /* ── Types ── */
 interface VibeTagSelectorProps {
+  /** Called after saving tags to the server */
   onSave?: (tags: VibeTag[]) => void
+  /** Filter mode: no save button, just multi-select for discovery filters */
+  filterMode?: boolean
+  /** Controlled selected IDs for filter mode */
+  selectedTagIds?: string[]
+  /** Callback for filter mode selection changes */
+  onSelectionChange?: (ids: string[]) => void
   className?: string
 }
 
+const MIN_TAGS = 3
 const MAX_TAGS = 5
 
+const CATEGORY_ORDER: VibeTagCategory[] = ['PERSONALITY', 'LIFESTYLE', 'DATING_STYLE', 'HUMOUR', 'VALUES', 'INTERESTS']
+
 const categoryLabels: Record<string, string> = {
-  LIFESTYLE: 'Lifestyle',
   PERSONALITY: 'Personality',
-  INTERESTS: 'Interests',
+  LIFESTYLE: 'Lifestyle',
+  DATING_STYLE: 'Dating Style',
+  HUMOUR: 'Humour',
   VALUES: 'Values',
+  INTERESTS: 'Interests',
 }
 
-const categoryEmojis: Record<string, string> = {
-  LIFESTYLE: '🌿',
-  PERSONALITY: '✨',
-  INTERESTS: '🎯',
-  VALUES: '💎',
-}
-
-/* ── Shake animation for "max reached" feedback ── */
-const shakeVariants = {
-  shake: {
-    x: [0, -6, 6, -4, 4, -2, 2, 0],
-    transition: { duration: 0.4 },
-  },
+/* ── Spring animation for satisfying select bounce ── */
+const chipSpring = {
+  type: 'spring' as const,
+  stiffness: 400,
+  damping: 15,
 }
 
 /* ── Component ── */
-export default function VibeTagSelector({ onSave, className = '' }: VibeTagSelectorProps) {
+export default function VibeTagSelector({
+  onSave,
+  filterMode = false,
+  selectedTagIds,
+  onSelectionChange,
+  className = '',
+}: VibeTagSelectorProps) {
   const [allTags, setAllTags] = useState<VibeTagsGrouped>({})
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [activeCategory, setActiveCategory] = useState<VibeTagCategory>('PERSONALITY')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [shakeTagId, setShakeTagId] = useState<string | null>(null)
-  const [showMaxTooltip, setShowMaxTooltip] = useState(false)
+  const tabsRef = useRef<HTMLDivElement>(null)
 
-  // Load all tags + user's current selection
+  const maxTags = filterMode ? Infinity : MAX_TAGS
+
+  // Load tags + user's current selection
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true)
-        const [grouped, mine] = await Promise.all([
-          vibeTagService.getAll(),
-          vibeTagService.getMine(),
-        ])
+        const grouped = await vibeTagService.getAll()
         setAllTags(grouped)
-        setSelectedIds(new Set(mine.map((t) => t.id)))
+
+        // Set initial active category to first one that has tags
+        const firstCat = CATEGORY_ORDER.find((c) => grouped[c]?.length)
+        if (firstCat) setActiveCategory(firstCat)
+
+        if (filterMode && selectedTagIds) {
+          setSelectedIds(new Set(selectedTagIds))
+        } else if (!filterMode) {
+          const mine = await vibeTagService.getMine()
+          setSelectedIds(new Set(mine.map((t) => t.id)))
+        }
       } catch (err: any) {
         setError(err.response?.data?.message || 'Failed to load vibe tags')
       } finally {
@@ -63,40 +83,45 @@ export default function VibeTagSelector({ onSave, className = '' }: VibeTagSelec
     load()
   }, [])
 
+  // Sync controlled selectedTagIds in filter mode
+  useEffect(() => {
+    if (filterMode && selectedTagIds) {
+      setSelectedIds(new Set(selectedTagIds))
+    }
+  }, [filterMode, selectedTagIds])
+
   const handleToggle = useCallback(
     (tag: VibeTag) => {
       setSelectedIds((prev) => {
         const next = new Set(prev)
         if (next.has(tag.id)) {
-          // Deselect
           next.delete(tag.id)
-          setShowMaxTooltip(false)
-        } else if (next.size >= MAX_TAGS) {
-          // At max — shake + tooltip
+        } else if (next.size >= maxTags) {
           setShakeTagId(tag.id)
-          setShowMaxTooltip(true)
-          setTimeout(() => {
-            setShakeTagId(null)
-            setShowMaxTooltip(false)
-          }, 1200)
-          return prev // Don't change selection
+          setTimeout(() => setShakeTagId(null), 600)
+          return prev
         } else {
-          // Select
           next.add(tag.id)
-          if (next.size >= MAX_TAGS) {
-            setShowMaxTooltip(true)
-            setTimeout(() => setShowMaxTooltip(false), 2000)
-          }
         }
+
+        if (filterMode && onSelectionChange) {
+          onSelectionChange(Array.from(next))
+        }
+
         return next
       })
     },
-    []
+    [maxTags, filterMode, onSelectionChange]
   )
 
   const handleSave = async () => {
+    if (selectedIds.size < MIN_TAGS) {
+      setError(`Select at least ${MIN_TAGS} tags`)
+      return
+    }
     try {
       setSaving(true)
+      setError('')
       const saved = await vibeTagService.update(Array.from(selectedIds))
       onSave?.(saved)
     } catch (err: any) {
@@ -107,20 +132,16 @@ export default function VibeTagSelector({ onSave, className = '' }: VibeTagSelec
   }
 
   const selectedCount = selectedIds.size
-  const atMax = selectedCount >= MAX_TAGS
+  const atMax = !filterMode && selectedCount >= MAX_TAGS
+
+  // Get tags for the active category
+  const categoryTags = allTags[activeCategory] || []
+  const availableCategories = CATEGORY_ORDER.filter((c) => allTags[c]?.length)
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-[var(--color-primary)] animate-spin" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-red-500 text-sm">{error}</p>
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#9FCFBF' }} />
       </div>
     )
   }
@@ -128,105 +149,131 @@ export default function VibeTagSelector({ onSave, className = '' }: VibeTagSelec
   return (
     <div className={className}>
       {/* Counter */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-[var(--color-text)]">Your Vibe Tags</h3>
-        <div className="flex items-center gap-2">
-          <AnimatePresence>
-            {showMaxTooltip && (
-              <motion.span
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                className="text-xs font-semibold text-[var(--color-danger)]"
-              >
-                Max {MAX_TAGS} tags
-              </motion.span>
-            )}
-          </AnimatePresence>
+      {!filterMode && (
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold" style={{ color: '#2B2B2B' }}>Your Vibe Tags</h3>
           <span
-            className={[
-              'text-sm font-bold px-2.5 py-0.5 rounded-full',
-              atMax
-                ? 'bg-[var(--color-primary)] text-white'
-                : 'bg-[var(--color-primary-50)] text-[var(--color-primary)]',
-            ].join(' ')}
+            className="text-sm font-bold px-3 py-1 rounded-full"
+            style={{
+              backgroundColor: atMax ? '#E8735A' : '#E1F5EE',
+              color: atMax ? '#fff' : '#2D5C4F',
+            }}
           >
-            {selectedCount}/{MAX_TAGS}
+            {selectedCount} of {MAX_TAGS} selected
           </span>
         </div>
-      </div>
+      )}
 
-      {/* Categories */}
-      <div className="space-y-5">
-        {(Object.entries(allTags) as [string, VibeTag[]][]).map(([category, tags]) => {
-          if (!tags || tags.length === 0) return null
+      {error && (
+        <div className="text-sm text-red-500 mb-3 px-1">{error}</div>
+      )}
+
+      {/* Category tabs — horizontal scroll */}
+      <div
+        ref={tabsRef}
+        className="flex gap-2 overflow-x-auto pb-3 mb-4 scrollbar-hide"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        {availableCategories.map((cat) => {
+          const isActive = cat === activeCategory
+          const catCount = (allTags[cat] || []).filter((t) => selectedIds.has(t.id)).length
 
           return (
-            <div key={category}>
-              <h4 className="text-sm font-bold text-[var(--color-text-secondary)] mb-2 flex items-center gap-1.5">
-                <span>{categoryEmojis[category] || ''}</span>
-                {categoryLabels[category] || category}
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => {
-                  const isSelected = selectedIds.has(tag.id)
-                  const isDisabled = atMax && !isSelected
-                  const isShaking = shakeTagId === tag.id
-
-                  return (
-                    <motion.button
-                      key={tag.id}
-                      variants={isShaking ? shakeVariants : undefined}
-                      animate={isShaking ? 'shake' : undefined}
-                      whileTap={!isDisabled ? { scale: 0.93 } : undefined}
-                      onClick={() => handleToggle(tag)}
-                      className={[
-                        'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold',
-                        'transition-all duration-200 select-none',
-                        isSelected
-                          ? 'bg-[var(--color-primary)] text-white shadow-sm'
-                          : isDisabled
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-800 dark:text-gray-600'
-                          : 'bg-[var(--color-primary-50)] text-[var(--color-primary-700)] hover:bg-[var(--color-primary-100)] dark:bg-secondary-800 dark:text-primary-300 dark:hover:bg-secondary-700',
-                      ].join(' ')}
-                    >
-                      <span className="text-base leading-none">{tag.emoji}</span>
-                      <span>{tag.label}</span>
-                      {isSelected && (
-                        <motion.span
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="ml-0.5 text-white/80"
-                        >
-                          ✓
-                        </motion.span>
-                      )}
-                    </motion.button>
-                  )
-                })}
-              </div>
-            </div>
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className="flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all whitespace-nowrap"
+              style={{
+                backgroundColor: isActive ? '#2D5C4F' : '#F5EDD8',
+                color: isActive ? '#fff' : '#6B7B75',
+              }}
+            >
+              {categoryLabels[cat]}
+              {catCount > 0 && (
+                <span
+                  className="ml-1.5 inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded-full"
+                  style={{
+                    backgroundColor: isActive ? 'rgba(255,255,255,0.3)' : '#E8735A',
+                    color: '#fff',
+                  }}
+                >
+                  {catCount}
+                </span>
+              )}
+            </button>
           )
         })}
       </div>
 
-      {/* Save button */}
-      <div className="mt-6">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="btn-primary w-full flex items-center justify-center gap-2"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            'Save Vibe Tags'
-          )}
-        </button>
+      {/* Tags grid — wrapping flex */}
+      <div className="flex flex-wrap gap-2.5">
+        <AnimatePresence mode="popLayout">
+          {categoryTags.map((tag) => {
+            const isSelected = selectedIds.has(tag.id)
+            const isDisabled = atMax && !isSelected
+            const isShaking = shakeTagId === tag.id
+
+            return (
+              <motion.button
+                key={tag.id}
+                layout
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{
+                  opacity: isDisabled ? 0.4 : 1,
+                  scale: isShaking ? [1, 0.95, 1.05, 0.97, 1] : isSelected ? 1 : 1,
+                }}
+                whileTap={!isDisabled ? { scale: 0.9 } : undefined}
+                transition={chipSpring}
+                onClick={() => handleToggle(tag)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold select-none transition-colors"
+                style={{
+                  backgroundColor: isSelected ? '#E8735A' : 'transparent',
+                  color: isSelected ? '#fff' : '#2B2B2B',
+                  border: isSelected ? '2px solid #E8735A' : '2px solid #E1E5E3',
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <span className="text-base leading-none">{tag.emoji}</span>
+                <span>{tag.label}</span>
+                {isSelected && (
+                  <motion.span
+                    initial={{ scale: 0, rotate: -90 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    exit={{ scale: 0, rotate: 90 }}
+                    transition={chipSpring}
+                    className="ml-0.5"
+                  >
+                    ✓
+                  </motion.span>
+                )}
+              </motion.button>
+            )
+          })}
+        </AnimatePresence>
       </div>
+
+      {/* Save button (profile mode only) */}
+      {!filterMode && (
+        <div className="mt-6">
+          <button
+            onClick={handleSave}
+            disabled={saving || selectedCount < MIN_TAGS}
+            className="w-full py-3 rounded-2xl text-white font-bold text-sm transition-all disabled:opacity-40"
+            style={{ backgroundColor: '#2D5C4F' }}
+          >
+            {saving ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving...
+              </span>
+            ) : selectedCount < MIN_TAGS ? (
+              `Select ${MIN_TAGS - selectedCount} more tag${MIN_TAGS - selectedCount > 1 ? 's' : ''}`
+            ) : (
+              'Save Vibe Tags'
+            )}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

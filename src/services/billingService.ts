@@ -21,6 +21,12 @@ export interface WhoVibedUser {
   likedAt: string
 }
 
+export interface InterestsReceivedResponse {
+  count: number
+  profiles: WhoVibedUser[] | null
+  isPremium: boolean
+}
+
 export const billingService = {
   getStatus: async (): Promise<SubscriptionStatus> => {
     const response = await api.get<SubscriptionStatus>('/billing/status')
@@ -32,6 +38,16 @@ export const billingService = {
     return response.data.url
   },
 
+  createPremiumCheckout: async (plan: 'monthly' | 'annual'): Promise<string> => {
+    const response = await api.post<{ url: string }>('/billing/create-checkout', { plan })
+    return response.data.url
+  },
+
+  getPortalUrl: async (): Promise<string> => {
+    const response = await api.get<{ url: string }>('/billing/portal')
+    return response.data.url
+  },
+
   useBoost: async (): Promise<{ message: string; boostsRemaining: number }> => {
     const response = await api.post('/billing/boost')
     return response.data
@@ -40,5 +56,10 @@ export const billingService = {
   getWhoVibedYou: async (): Promise<WhoVibedUser[]> => {
     const response = await api.get<{ users: WhoVibedUser[] }>('/billing/who-vibed')
     return response.data.users
+  },
+
+  getInterestsReceived: async (): Promise<InterestsReceivedResponse> => {
+    const response = await api.get<InterestsReceivedResponse>('/matches/interests-received')
+    return response.data
   },
 }

@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { CheckCircle, X, Sparkles, MapPin } from 'lucide-react'
 import VibeTag from './VibeTag'
 import Button from './Button'
+import VoicePlayer from '../../components/VoicePlayer'
 
 /* ── Types ── */
 interface VibeTagData {
@@ -19,6 +20,8 @@ export interface ProfileCardUser {
   isVerified?: boolean
   vibeTags?: VibeTagData[]
   compatibilityScore?: number
+  voiceMemoUrl?: string | null
+  voiceMemoDuration?: number | null
 }
 
 interface ProfileCardProps {
@@ -101,6 +104,15 @@ export default function ProfileCard({
 
       {/* ── Content ── */}
       <div className="flex flex-1 flex-col gap-3 p-4">
+        {/* Voice memo */}
+        {user.voiceMemoUrl && user.voiceMemoDuration && (
+          <VoicePlayer
+            audioUrl={user.voiceMemoUrl}
+            duration={user.voiceMemoDuration}
+            senderName={user.firstName}
+          />
+        )}
+
         {/* Vibe tags */}
         {user.vibeTags && user.vibeTags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">

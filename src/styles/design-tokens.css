@@ -1,0 +1,136 @@
+/* =============================================================
+   2Match Design System — CSS Custom Properties (Design Tokens)
+   Brand: 2Match — "Where real connections begin"
+   Palette: earthy, warm, forest-inspired
+   ============================================================= */
+
+:root {
+  /* ── Primary ── */
+  --color-primary-forest: #2D5C4F;
+  --color-primary-sage: #9FCFBF;
+  --color-primary-light: #E1F5EE;
+
+  /* ── Accent ── */
+  --color-accent-terracotta: #E8735A;
+  --color-accent-warm: #FAEEDA;
+
+  /* ── Neutral ── */
+  --color-neutral-cream: #F5EDD8;
+  --color-neutral-warm-white: #F9F6F0;
+  --color-neutral-almost-black: #2B2B2B;
+  --color-neutral-dark-bg: #1A1A18;
+
+  /* ── Semantic ── */
+  --color-success: #4A9E6E;
+  --color-success-light: #E1F5EE;
+  --color-warning: #D4A843;
+  --color-warning-light: #FAEEDA;
+  --color-danger: #E8735A;
+  --color-danger-light: #FDE8E3;
+  --color-info: #5A8F9E;
+  --color-info-light: #E1F0F5;
+
+  /* ── Surface (light mode) ── */
+  --color-surface: #F9F6F0;
+  --color-surface-raised: #FFFFFF;
+  --color-surface-sunken: #F5EDD8;
+  --color-surface-overlay: rgba(43, 43, 43, 0.6);
+
+  /* ── Text (light mode) ── */
+  --color-text: #2B2B2B;
+  --color-text-secondary: #5C5C52;
+  --color-text-tertiary: #8A8A7E;
+  --color-text-inverse: #FFFFFF;
+  --color-text-on-primary: #FFFFFF;
+
+  /* ── Typography ── */
+  --font-family-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-family-serif: 'Lora', Georgia, serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+  --font-size-4xl: 2.25rem;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.7;
+
+  /* ── Spacing Scale (4px base) ── */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+
+  /* ── Border Radius ── */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+  --radius-full: 9999px;
+
+  /* ── Shadows ── */
+  --shadow-xs: 0 1px 2px rgba(43, 43, 43, 0.04);
+  --shadow-sm: 0 1px 3px rgba(43, 43, 43, 0.06), 0 1px 2px rgba(43, 43, 43, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(43, 43, 43, 0.06), 0 2px 4px -2px rgba(43, 43, 43, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(43, 43, 43, 0.08), 0 4px 6px -4px rgba(43, 43, 43, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(43, 43, 43, 0.08), 0 8px 10px -6px rgba(43, 43, 43, 0.04);
+  --shadow-2xl: 0 25px 50px -12px rgba(43, 43, 43, 0.16);
+  --shadow-card: 0 2px 8px rgba(43, 43, 43, 0.06), 0 0 1px rgba(43, 43, 43, 0.08);
+  --shadow-card-hover: 0 12px 24px rgba(45, 92, 79, 0.12), 0 4px 8px rgba(43, 43, 43, 0.06);
+
+  /* ── Transitions ── */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Z-Index Scale ── */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-nav: 40;
+  --z-modal-backdrop: 50;
+  --z-modal: 60;
+  --z-celebration: 70;
+  --z-toast: 80;
+
+  /* ── Layout ── */
+  --sidebar-width: 64px;
+  --right-panel-width: 280px;
+  --nav-height: 64px;
+  --mobile-nav-height: 56px;
+}
+
+/* ── Dark Mode Overrides ── */
+.dark {
+  --color-surface: #1A1A18;
+  --color-surface-raised: #262622;
+  --color-surface-sunken: #121210;
+  --color-surface-overlay: rgba(0, 0, 0, 0.7);
+
+  --color-text: #F0EDE6;
+  --color-text-secondary: #A8A49C;
+  --color-text-tertiary: #6E6A62;
+
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 1px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 12px 24px rgba(45, 92, 79, 0.2), 0 4px 8px rgba(0, 0, 0, 0.3);
+}
