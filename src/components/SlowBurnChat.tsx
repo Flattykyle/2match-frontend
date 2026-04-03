@@ -389,7 +389,7 @@ const SlowBurnChat = ({ matchId, onUnlocked }: SlowBurnChatProps) => {
           }}
           onFocus={(e) => {
             e.currentTarget.style.borderColor = '#9FCFBF'
-            e.currentTarget.style.ringColor = '#9FCFBF'
+            e.currentTarget.style.outlineColor = '#9FCFBF'
           }}
           onBlur={(e) => {
             e.currentTarget.style.borderColor = '#E1F5EE'

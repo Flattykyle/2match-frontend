@@ -48,9 +48,9 @@ const SAFETY_TIPS = [
 ]
 
 export default function SafetyBottomSheet({ isOpen, onClose }: SafetyBottomSheetProps) {
-  const { user } = useAuthStore()
+  const { user: _user } = useAuthStore()
   const [activeCheckin, setActiveCheckin] = useState<DateCheckin | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [_loading, setLoading] = useState(false)
 
   // Date check-in form
   const [dateTime, setDateTime] = useState('')
@@ -331,7 +331,7 @@ export default function SafetyBottomSheet({ isOpen, onClose }: SafetyBottomSheet
                           : 'hover:bg-gray-50'
                       }`}
                       style={{
-                        ringColor: selectedMood === opt.mood ? '#2D5C4F' : undefined,
+                        outlineColor: selectedMood === opt.mood ? '#2D5C4F' : undefined,
                         backgroundColor: selectedMood === opt.mood ? '#E1F5EE' : undefined,
                       }}
                     >

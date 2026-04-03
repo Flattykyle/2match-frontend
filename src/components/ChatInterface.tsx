@@ -53,7 +53,7 @@ const ChatInterface = ({ conversation, isMobileFullScreen = false, icebreakerUnl
   const [safeToast, setSafeToast] = useState<string | null>(null)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
-  const [blocked, setBlocked] = useState(false)
+  const [_blocked, setBlocked] = useState(false)
   const [blockToast, setBlockToast] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)

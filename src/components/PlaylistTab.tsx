@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Music, Search, Plus, Play, Pause, Loader2, ExternalLink } from 'lucide-react'
+import { Music, Search, Plus, Play, Pause, Loader2, ExternalLink as _ExternalLink } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSocket } from '../context/SocketContext'
 import { useAuthStore } from '../store/authStore'

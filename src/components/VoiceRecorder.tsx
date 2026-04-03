@@ -35,7 +35,7 @@ export default function VoiceRecorder({
   const [isPlaying, setIsPlaying] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState('')
-  const [bars, setBars] = useState<number[]>(new Array(BAR_COUNT).fill(4))
+  const [_bars, setBars] = useState<number[]>(new Array(BAR_COUNT).fill(4))
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
