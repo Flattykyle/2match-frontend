@@ -34,6 +34,19 @@ class ErrorBoundary extends Component<Props, State> {
     window.location.reload()
   }
 
+  private handleClearAndReload = async () => {
+    // Unregister service workers and clear caches to fix stale chunk issues
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(registrations.map((r) => r.unregister()))
+    }
+    if ('caches' in window) {
+      const names = await caches.keys()
+      await Promise.all(names.map((n) => caches.delete(n)))
+    }
+    window.location.reload()
+  }
+
   public render() {
     if (this.state.hasError) {
       return (
@@ -49,11 +62,16 @@ class ErrorBoundary extends Component<Props, State> {
               We're sorry, but something unexpected happened. Please try reloading the page.
             </p>
 
-            {import.meta.env.DEV && this.state.error && (
+            {this.state.error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-left">
                 <p className="font-mono text-sm text-red-800 break-all">
                   {this.state.error.toString()}
                 </p>
+                {this.state.error.stack && (
+                  <pre className="font-mono text-xs text-red-600 mt-2 whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
+                    {this.state.error.stack}
+                  </pre>
+                )}
               </div>
             )}
 
@@ -66,10 +84,10 @@ class ErrorBoundary extends Component<Props, State> {
               </button>
 
               <button
-                onClick={() => (window.location.href = '/')}
+                onClick={this.handleClearAndReload}
                 className="w-full bg-gray-100 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-200 transition font-semibold"
               >
-                Go to Home
+                Clear Cache & Reload
               </button>
             </div>
           </div>

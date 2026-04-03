@@ -44,3 +44,5 @@ Thumbs.db
 "@ | Out-File -FilePath .gitignore -Encoding utf8 -Force
 
 nul
+
+.vercel

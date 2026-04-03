@@ -7,24 +7,41 @@ import ErrorBoundary from './components/ErrorBoundary'
 import PageLoader from './components/PageLoader'
 import Layout from './components/Layout'
 
+// Retry wrapper for lazy imports — handles stale chunks after redeployment
+function lazyWithRetry(importFn: () => Promise<any>) {
+  return lazy(() =>
+    importFn().catch(() => {
+      // Chunk likely stale after a new deployment — force reload once
+      const key = '2match-chunk-retry'
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1')
+        window.location.reload()
+      }
+      // If we already retried, clear the flag and let the error propagate
+      sessionStorage.removeItem(key)
+      return importFn()
+    })
+  )
+}
+
 // Lazy load all page components for code splitting
-const Home = lazy(() => import('./pages/Home'))
-const Login = lazy(() => import('./pages/Login'))
-const Register = lazy(() => import('./pages/Register'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const ProfileEdit = lazy(() => import('./pages/ProfileEdit'))
-const Discovery = lazy(() => import('./pages/Discovery'))
-const Matches = lazy(() => import('./pages/Matches'))
-const Messages = lazy(() => import('./pages/Messages'))
-const LikedProfiles = lazy(() => import('./pages/LikedProfiles'))
-const Search = lazy(() => import('./pages/Search'))
-const Settings = lazy(() => import('./pages/Settings'))
-const ProfileViews = lazy(() => import('./pages/ProfileViews'))
-const BlockedUsers = lazy(() => import('./pages/BlockedUsers'))
-const Icebreaker = lazy(() => import('./pages/Icebreaker'))
-const SafetySettingsPage = lazy(() => import('./pages/SafetySettings'))
-const Upgrade = lazy(() => import('./pages/Upgrade'))
-const Onboarding = lazy(() => import('./pages/Onboarding'))
+const Home = lazyWithRetry(() => import('./pages/Home'))
+const Login = lazyWithRetry(() => import('./pages/Login'))
+const Register = lazyWithRetry(() => import('./pages/Register'))
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'))
+const ProfileEdit = lazyWithRetry(() => import('./pages/ProfileEdit'))
+const Discovery = lazyWithRetry(() => import('./pages/Discovery'))
+const Matches = lazyWithRetry(() => import('./pages/Matches'))
+const Messages = lazyWithRetry(() => import('./pages/Messages'))
+const LikedProfiles = lazyWithRetry(() => import('./pages/LikedProfiles'))
+const Search = lazyWithRetry(() => import('./pages/Search'))
+const Settings = lazyWithRetry(() => import('./pages/Settings'))
+const ProfileViews = lazyWithRetry(() => import('./pages/ProfileViews'))
+const BlockedUsers = lazyWithRetry(() => import('./pages/BlockedUsers'))
+const Icebreaker = lazyWithRetry(() => import('./pages/Icebreaker'))
+const SafetySettingsPage = lazyWithRetry(() => import('./pages/SafetySettings'))
+const Upgrade = lazyWithRetry(() => import('./pages/Upgrade'))
+const Onboarding = lazyWithRetry(() => import('./pages/Onboarding'))
 
 // BEFORE: Single ErrorBoundary at the top — one route crash kills the entire app
 // AFTER: ErrorBoundary wraps each route-level component individually, so a crash
